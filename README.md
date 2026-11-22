@@ -4,6 +4,14 @@ A desktop focus timer where each session is a flight. Pick a departure and a dur
 
 Linux only for now. Built with Tauri v2, TypeScript, Vite, Tailwind CSS, globe.gl and SQLite.
 
+## Install or update
+
+Run the same command for both. It needs Linux x86_64 and keeps your logbook.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.sh | bash
+```
+
 ## Requirements
 
 - Rust (stable), Node.js and [Bun](https://bun.sh)
