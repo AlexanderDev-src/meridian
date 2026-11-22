@@ -2,15 +2,25 @@
 
 A desktop focus timer where each session is a flight. Pick a departure and a duration, board a real route that takes about that long, and watch the plane cross the globe while you work.
 
-Linux only for now. Built with Tauri v2, TypeScript, Vite, Tailwind CSS, globe.gl and SQLite.
+For Linux and Windows. Built with Tauri v2, TypeScript, Vite, Tailwind CSS, globe.gl and SQLite.
 
 ## Install or update
 
-Run the same command for both. It needs Linux x86_64 and keeps your logbook.
+Run the same command for both. Your logbook stays.
+
+**Linux x86_64** (needs WebKitGTK 4.1)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.sh | bash
 ```
+
+**Windows 10/11 x64** (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.ps1 | iex
+```
+
+The Windows build is not code-signed yet. Desktop notifications are Linux only for now; sounds work on both.
 
 ## Requirements
 

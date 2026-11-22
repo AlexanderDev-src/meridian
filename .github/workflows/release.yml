@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    # The oldest supported Ubuntu keeps the binary compatible with newer distros.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libssl-dev
+      - run: bun install --frozen-lockfile
+      - run: bun test src
+      - run: cargo test --workspace
+      - run: bun run tauri build --bundles deb
+      - name: Package
+        run: |
+          mkdir -p out pkg/extracted pkg/app/bin pkg/app/lib/Meridian pkg/app/share/icons
+          deb=$(ls target/release/bundle/deb/*.deb)
+          dpkg-deb -x "$deb" pkg/extracted
+          cp pkg/extracted/usr/bin/meridian pkg/app/bin/
+          cp pkg/extracted/usr/lib/Meridian/airports.sqlite pkg/app/lib/Meridian/
+          cp src-tauri/icons/icon.png pkg/app/share/icons/meridian.png
+          tar -czf out/Meridian-linux-x86_64.tar.gz -C pkg/app bin lib share
+          cp "$deb" out/Meridian-linux-amd64.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: out/*
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: bun install --frozen-lockfile
+      - run: bun test src
+      - run: bun run tauri build --bundles nsis
+      - name: Package
+        run: |
+          mkdir -p out
+          cp target/release/bundle/nsis/*-setup.exe out/Meridian-windows-x64-setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Add checksums
+        working-directory: out
+        run: for f in *; do sha256sum "$f" > "$f.sha256"; done
+      - name: Create the release
+        working-directory: out
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cat > ../notes.md <<'EOF'
+          Install or update with one command.
+
+          **Linux x86_64** (needs WebKitGTK 4.1)
+
+          ```sh
+          curl -fsSL https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.sh | bash
+          ```
+
+          **Windows 10/11 x64** (PowerShell)
+
+          ```powershell
+          irm https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.ps1 | iex
+          ```
+
+          The Windows installer is not code-signed yet, so SmartScreen may warn if you open the `.exe` directly.
+          EOF
+          sed -i 's/^          //' ../notes.md
+          gh release create "$GITHUB_REF_NAME" * --verify-tag --title "Meridian $GITHUB_REF_NAME" --notes-file ../notes.md
+
+  verify-windows:
+    needs: publish
+    runs-on: windows-latest
+    steps:
+      - name: Install with the public command
+        shell: powershell
+        run: irm https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.ps1 | iex
+      - name: Run it again and launch the app
+        shell: powershell
+        run: |
+          $output = irm https://raw.githubusercontent.com/AlexanderDev-src/meridian/main/install.ps1 | iex *>&1 | Out-String
+          if ($output -notmatch "already up to date") { throw "Second run should skip the download: $output" }
+          $app = Start-Process -FilePath "$env:LOCALAPPDATA\Meridian\meridian.exe" -PassThru
+          Start-Sleep -Seconds 15
+          if ($app.HasExited) { throw "Meridian exited with code $($app.ExitCode)" }
+          Stop-Process -Id $app.Id -Force

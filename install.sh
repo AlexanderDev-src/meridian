@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO="AlexanderDev-src/meridian"
-ASSET="Meridian-x86_64.AppImage"
+ASSET="Meridian-linux-x86_64.tar.gz"
 tmp=""
 
 die() {
@@ -14,12 +14,15 @@ die() {
 # Everything runs inside main, so a cut-off download through a pipe does nothing.
 main() {
   [ "$(uname -sm)" = "Linux x86_64" ] || die "only Linux x86_64 is supported"
-  for tool in curl sha256sum install; do
+  for tool in curl sha256sum install tar ldconfig; do
     command -v "$tool" >/dev/null || die "$tool is required"
   done
+  ldconfig -p | grep -q 'libwebkit2gtk-4\.1' ||
+    die "WebKitGTK 4.1 is required (Arch: webkit2gtk-4.1, Ubuntu/Debian: libwebkit2gtk-4.1-0, Fedora: webkit2gtk4.1)"
 
-  local data="${XDG_DATA_HOME:-$HOME/.local/share}"
-  local bin="$HOME/.local/bin/meridian"
+  local prefix="$HOME/.local"
+  local data="${XDG_DATA_HOME:-$prefix/share}"
+  local bin="$prefix/bin/meridian"
   local version_file="$data/meridian/version"
 
   local latest tag
@@ -39,11 +42,13 @@ main() {
   curl -fL --progress-bar -o "$tmp/$ASSET" "$base/$ASSET"
   curl -fsSL -o "$tmp/$ASSET.sha256" "$base/$ASSET.sha256"
   (cd "$tmp" && sha256sum -c --quiet "$ASSET.sha256") || die "checksum failed, nothing was changed"
-  curl -fsSL -o "$tmp/icon.png" "https://raw.githubusercontent.com/$REPO/$tag/src-tauri/icons/icon.png"
+  mkdir "$tmp/app"
+  tar -xzf "$tmp/$ASSET" -C "$tmp/app" --no-same-owner bin/meridian lib/Meridian/airports.sqlite share/icons/meridian.png
 
-  install -Dm755 "$tmp/$ASSET" "$bin.new"
+  install -Dm644 "$tmp/app/lib/Meridian/airports.sqlite" "$prefix/lib/Meridian/airports.sqlite"
+  install -Dm755 "$tmp/app/bin/meridian" "$bin.new"
   mv -f "$bin.new" "$bin"
-  install -Dm644 "$tmp/icon.png" "$data/icons/meridian.png"
+  install -Dm644 "$tmp/app/share/icons/meridian.png" "$data/icons/meridian.png"
   mkdir -p "$data/applications" "$data/meridian"
   printf '[Desktop Entry]\nType=Application\nName=Meridian\nComment=Focus sessions as flights\nExec=%s\nIcon=%s\nCategories=Utility;\nTerminal=false\n' \
     "$bin" "$data/icons/meridian.png" > "$data/applications/meridian.desktop"

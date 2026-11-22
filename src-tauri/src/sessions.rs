@@ -35,7 +35,11 @@ pub struct Session {
     pub started_at_ms: i64,
     pub ended_at_ms: i64,
     pub status: Status,
+    #[serde(default)]
+    pub tag: Option<String>,
 }
+
+const MAX_TAG_CHARS: usize = 18;
 
 pub fn open(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch(
@@ -50,7 +54,13 @@ pub fn open(db: &Connection) -> rusqlite::Result<()> {
             ended_at_ms INTEGER NOT NULL,
             status TEXT NOT NULL CHECK (status IN ('completed', 'cancelled'))
         );",
-    )
+    )?;
+    // Older logbooks have no tag column; their rows stay and read as untagged.
+    let has_tag = db.prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'tag'")?.exists([])?;
+    if !has_tag {
+        db.execute_batch("ALTER TABLE sessions ADD COLUMN tag TEXT;")?;
+    }
+    Ok(())
 }
 
 fn validate(s: &Session) -> Result<(), String> {
@@ -58,7 +68,8 @@ fn validate(s: &Session) -> Result<(), String> {
         && s.distance_km >= 0.0
         && s.planned_minutes > 0
         && s.focused_ms >= 0
-        && s.ended_at_ms >= s.started_at_ms;
+        && s.ended_at_ms >= s.started_at_ms
+        && s.tag.as_ref().is_none_or(|t| !t.trim().is_empty() && t.chars().count() <= MAX_TAG_CHARS);
     valid.then_some(()).ok_or_else(|| "invalid session".to_string())
 }
 
@@ -66,8 +77,8 @@ pub fn save(db: &Connection, s: &Session) -> Result<(), String> {
     validate(s)?;
     db.execute(
         "INSERT INTO sessions (origin_iata, dest_iata, distance_km, planned_minutes,
-            focused_ms, started_at_ms, ended_at_ms, status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            focused_ms, started_at_ms, ended_at_ms, status, tag)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             s.origin_iata,
             s.dest_iata,
@@ -76,7 +87,8 @@ pub fn save(db: &Connection, s: &Session) -> Result<(), String> {
             s.focused_ms,
             s.started_at_ms,
             s.ended_at_ms,
-            s.status.as_str()
+            s.status.as_str(),
+            s.tag
         ],
     )
     .map(|_| ())
@@ -88,7 +100,7 @@ pub fn list(db: &Connection) -> Result<Vec<Session>, String> {
     let mut query = db
         .prepare(
             "SELECT origin_iata, dest_iata, distance_km, planned_minutes, focused_ms,
-                started_at_ms, ended_at_ms, status
+                started_at_ms, ended_at_ms, status, tag
              FROM sessions ORDER BY ended_at_ms DESC, id DESC",
         )
         .map_err(|e| e.to_string())?;
@@ -104,6 +116,7 @@ pub fn list(db: &Connection) -> Result<Vec<Session>, String> {
                 started_at_ms: r.get(5)?,
                 ended_at_ms: r.get(6)?,
                 status: Status::parse(&status).ok_or(rusqlite::Error::InvalidQuery)?,
+                tag: r.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -124,6 +137,34 @@ mod tests {
             started_at_ms: 0,
             ended_at_ms,
             status,
+            tag: Some("Study".into()),
+        }
+    }
+
+    #[test]
+    fn upgrades_an_old_logbook_without_losing_rows() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE sessions (id INTEGER PRIMARY KEY, origin_iata TEXT NOT NULL, dest_iata TEXT NOT NULL,
+                distance_km REAL NOT NULL, planned_minutes INTEGER NOT NULL, focused_ms INTEGER NOT NULL,
+                started_at_ms INTEGER NOT NULL, ended_at_ms INTEGER NOT NULL, status TEXT NOT NULL);
+             INSERT INTO sessions VALUES (1, 'BKK', 'HKG', 1690.0, 125, 60000, 0, 10, 'completed');",
+        )
+        .unwrap();
+        open(&db).unwrap();
+        open(&db).unwrap();
+        let rows = list(&db).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].tag, None);
+    }
+
+    #[test]
+    fn rejects_a_blank_or_oversized_tag() {
+        let db = Connection::open_in_memory().unwrap();
+        open(&db).unwrap();
+        for tag in ["  ", "this tag is much too long"] {
+            let bad = Session { tag: Some(tag.into()), ..session(10, Status::Completed) };
+            assert!(save(&db, &bad).is_err());
         }
     }
 

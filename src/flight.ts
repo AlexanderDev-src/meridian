@@ -31,7 +31,7 @@ export const resumeClock = (c: FlightClock, now: number): FlightClock =>
 export const landingTime = (c: FlightClock, now: number): number =>
   c.paused ? now : Math.min(now, c.segmentStart + c.totalMs - c.accumulatedMs);
 
-export type SavedFlight = { origin: Airport; dest: Airport; minutes: number; clock: FlightClock };
+export type SavedFlight = { origin: Airport; dest: Airport; minutes: number; clock: FlightClock; tag?: string };
 
 // Saved as paused: time with the app closed must not count as focus.
 export const encodeFlight = (flight: SavedFlight, now: number): string =>

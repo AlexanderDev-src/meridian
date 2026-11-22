@@ -5,7 +5,7 @@ mod sessions;
 use airports::{Airport, Destination, Route};
 use rusqlite::Connection;
 use sessions::Session;
-use std::{fs, sync::Mutex};
+use std::{fs, process::Command, sync::Mutex};
 use tauri::{Manager, State};
 
 struct AppState {
@@ -23,8 +23,8 @@ impl AppState {
 }
 
 #[tauri::command]
-fn search_airports(state: State<AppState>, query: String) -> Vec<Airport> {
-    airports::search(&state.airports, &query)
+fn search_airports(state: State<AppState>, query: String, countries: Vec<String>) -> Vec<Airport> {
+    airports::search(&state.airports, &query, &countries)
 }
 
 #[tauri::command]
@@ -41,8 +41,23 @@ fn search_destinations(
     state: State<AppState>,
     origin_iata: String,
     query: String,
+    countries: Vec<String>,
 ) -> Result<Vec<Destination>, String> {
-    airports::search_destinations(&state.airports, &origin_iata, &query)
+    airports::search_destinations(&state.airports, &origin_iata, &query, &countries)
+}
+
+#[tauri::command(async)]
+fn notify(title: String, body: String) -> Result<(), String> {
+    let status = Command::new("notify-send")
+        .args(["--app-name=Meridian", "--", &title, &body])
+        .status()
+        .map_err(|error| format!("notify-send is not available: {error}"))?;
+    status.success().then_some(()).ok_or_else(|| "the desktop rejected the notification".to_string())
+}
+
+#[tauri::command]
+fn airports_by_code(state: State<AppState>, codes: Vec<String>) -> Vec<Airport> {
+    state.airports.iter().filter(|a| codes.contains(&a.iata)).cloned().collect()
 }
 
 #[tauri::command]
@@ -92,10 +107,12 @@ pub fn run() {
             search_airports,
             find_destinations,
             search_destinations,
+            airports_by_code,
             longest_flight,
             plan_route,
             save_session,
             list_sessions,
+            notify,
             dev_log
         ])
         .run(tauri::generate_context!())
