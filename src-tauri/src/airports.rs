@@ -59,7 +59,7 @@ fn find<'a>(airports: &'a [Airport], iata: &str) -> Result<&'a Airport, String> 
         .ok_or_else(|| format!("unknown airport: {iata}"))
 }
 
-fn search_rank(airport: &Airport, query: &str) -> Option<u8> {
+fn search_rank(airport: &Airport, query: &str, countries: &[String]) -> Option<u8> {
     let (iata, city, name) =
         (airport.iata.to_lowercase(), airport.city.to_lowercase(), airport.name.to_lowercase());
     match () {
@@ -67,19 +67,24 @@ fn search_rank(airport: &Airport, query: &str) -> Option<u8> {
         _ if iata.starts_with(query) => Some(1),
         _ if city.starts_with(query) => Some(2),
         _ if city.contains(query) || name.contains(query) => Some(3),
+        _ if countries.contains(&airport.country) => Some(4),
         _ => None,
     }
 }
 
-pub fn search(airports: &[Airport], query: &str) -> Vec<Airport> {
+/// `countries` holds ISO codes matched from the text; a country search lists all its airports.
+pub fn search(airports: &[Airport], query: &str, countries: &[String]) -> Vec<Airport> {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return Vec::new();
     }
-    let mut hits: Vec<(u8, &Airport)> =
-        airports.iter().filter_map(|a| search_rank(a, &query).map(|rank| (rank, a))).collect();
+    let mut hits: Vec<(u8, &Airport)> = airports
+        .iter()
+        .filter_map(|a| search_rank(a, &query, countries).map(|rank| (rank, a)))
+        .collect();
     hits.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.iata.cmp(&b.1.iata)));
-    hits.into_iter().take(MAX_SEARCH_RESULTS).map(|(_, a)| a.clone()).collect()
+    let limit = if countries.is_empty() { MAX_SEARCH_RESULTS } else { hits.len() };
+    hits.into_iter().take(limit).map(|(_, a)| a.clone()).collect()
 }
 
 /// Finds any airport by text, with its distance from the origin.
@@ -87,10 +92,11 @@ pub fn search_destinations(
     airports: &[Airport],
     origin_iata: &str,
     query: &str,
+    countries: &[String],
 ) -> Result<Vec<Destination>, String> {
     let origin = find(airports, origin_iata)?;
     let others: Vec<Airport> = airports.iter().filter(|a| a.iata != origin.iata).cloned().collect();
-    Ok(search(&others, query)
+    Ok(search(&others, query, countries)
         .into_iter()
         .map(|airport| {
             let distance_km = haversine_km(origin.position(), airport.position());
@@ -189,18 +195,27 @@ mod tests {
     #[test]
     fn search_matches_code_city_and_name_with_exact_code_first() {
         let airports = fixture();
-        assert_eq!(search(&airports, "bkk")[0].iata, "BKK");
-        assert_eq!(search(&airports, "chiang")[0].iata, "CNX");
-        assert_eq!(search(&airports, "international").len(), 6);
-        assert!(search(&airports, "  ").is_empty());
+        assert_eq!(search(&airports, "bkk", &[])[0].iata, "BKK");
+        assert_eq!(search(&airports, "chiang", &[])[0].iata, "CNX");
+        assert_eq!(search(&airports, "international", &[]).len(), 6);
+        assert!(search(&airports, "  ", &[]).is_empty());
     }
 
     #[test]
     fn search_destinations_ignores_time_and_excludes_origin() {
-        let found = search_destinations(&fixture(), "BKK", "international").unwrap();
+        let found = search_destinations(&fixture(), "BKK", "international", &[]).unwrap();
         assert_eq!(found.len(), 5);
         assert!(found.iter().all(|d| d.airport.iata != "BKK" && d.distance_km > 0.0));
-        assert!(search_destinations(&fixture(), "ZZZ", "tokyo").is_err());
+        assert!(search_destinations(&fixture(), "ZZZ", "tokyo", &[]).is_err());
+    }
+
+    #[test]
+    fn country_search_lists_every_airport_past_the_limit() {
+        let many: Vec<Airport> = (0..30)
+            .map(|i| Airport { country: "JP".into(), ..airport(&format!("A{i:02}"), "Somewhere", 0.0, 0.0) })
+            .collect();
+        assert_eq!(search(&many, "japan", &["JP".to_string()]).len(), 30);
+        assert!(search(&many, "japan", &[]).is_empty());
     }
 
     #[test]
@@ -215,7 +230,7 @@ mod tests {
     fn search_returns_at_most_20() {
         let many: Vec<Airport> =
             (0..30).map(|i| airport(&format!("A{i:02}"), "Sameville", 0.0, 0.0)).collect();
-        assert_eq!(search(&many, "sameville").len(), MAX_SEARCH_RESULTS);
+        assert_eq!(search(&many, "sameville", &[]).len(), MAX_SEARCH_RESULTS);
     }
 
     #[test]

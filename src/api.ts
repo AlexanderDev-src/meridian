@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { countryCodes } from "./country";
 
 export type Airport = {
   iata: string;
@@ -22,21 +23,26 @@ export type Session = {
   started_at_ms: number;
   ended_at_ms: number;
   status: "completed" | "cancelled";
+  tag: string | null;
 };
 
-export const searchAirports = (query: string) => invoke<Airport[]>("search_airports", { query });
+export const searchAirports = (query: string) =>
+  invoke<Airport[]>("search_airports", { query, countries: countryCodes(query) });
 
 export const findDestinations = (originIata: string, minutes: number) =>
   invoke<Destination[]>("find_destinations", { originIata, minutes });
 
 export const searchDestinations = (originIata: string, query: string) =>
-  invoke<Destination[]>("search_destinations", { originIata, query });
+  invoke<Destination[]>("search_destinations", { originIata, query, countries: countryCodes(query) });
 
-export const longestFlight = (originIata: string) => invoke<number>("longest_flight", { originIata });
+export const airportsByCode = (codes: string[]) => invoke<Airport[]>("airports_by_code", { codes });
+
+export const longestFlight =(originIata: string) => invoke<number>("longest_flight", { originIata });
 
 export const planRoute = (originIata: string, destIata: string) =>
   invoke<Route>("plan_route", { originIata, destIata });
 
 export const saveSession = (session: Session) => invoke<void>("save_session", { session });
 export const listSessions = () => invoke<Session[]>("list_sessions");
-export const devLog = (message: string) => invoke<void>("dev_log", { message });
+export const notifyDesktop = (title: string, body: string) => invoke<void>("notify", { title, body });
+export const devLog =(message: string) => invoke<void>("dev_log", { message });
