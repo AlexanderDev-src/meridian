@@ -1,0 +1,7 @@
+node_modules/
+dist/
+target/
+data/airports.csv
+src-tauri/gen/
+*.sqlite-journal
+*.tmp

@@ -1,0 +1,110 @@
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-latin.woff2") format("woff2");
+  font-weight: 200 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/instrument-serif-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  color: #f5f4f0;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+#globe {
+  position: fixed;
+  inset: 0;
+  cursor: grab;
+  transition: transform 0.6s ease;
+}
+
+#globe:active {
+  cursor: grabbing;
+}
+
+#globe.plan-shift {
+  transform: translateX(220px);
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.mr-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.mr-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mr-range::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    #d4b47c 0,
+    #d4b47c var(--p),
+    rgba(255, 255, 255, 0.16) var(--p),
+    rgba(255, 255, 255, 0.16) 100%
+  );
+}
+
+.mr-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid #000;
+  box-shadow: 0 0 0 1px #d4b47c, 0 4px 18px rgba(0, 0, 0, 0.6);
+}
+
+.mr-flight:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mr-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mr-cta:hover {
+  filter: brightness(1.08);
+}
+
+.mr-cta:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: none;
+}
