@@ -31,9 +31,9 @@ function Install-Meridian {
         $setup = Join-Path $tmp $asset
         Write-Host "Downloading Meridian $tag..."
         Invoke-WebRequest -UseBasicParsing -Uri "$base/$asset" -OutFile $setup
-        $expected = ((Invoke-WebRequest -UseBasicParsing -Uri "$base/$asset.sha256").Content | ForEach-Object {
-            if ($_ -is [byte[]]) { [Text.Encoding]::ASCII.GetString($_) } else { $_ }
-        }).Trim().Split(" ")[0]
+        $sumFile = "$setup.sha256"
+        Invoke-WebRequest -UseBasicParsing -Uri "$base/$asset.sha256" -OutFile $sumFile
+        $expected = (Get-Content $sumFile -Raw).Trim().Split(" ")[0]
         $actual = (Get-FileHash -Algorithm SHA256 -Path $setup).Hash
         if ($actual -ine $expected) { throw "Checksum failed, nothing was changed." }
 

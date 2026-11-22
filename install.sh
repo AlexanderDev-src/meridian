@@ -17,7 +17,8 @@ main() {
   for tool in curl sha256sum install tar ldconfig; do
     command -v "$tool" >/dev/null || die "$tool is required"
   done
-  ldconfig -p | grep -q 'libwebkit2gtk-4\.1' ||
+  # Not grep -q: it exits early, and pipefail then reports the closed pipe as a failure.
+  ldconfig -p | grep 'libwebkit2gtk-4\.1' >/dev/null ||
     die "WebKitGTK 4.1 is required (Arch: webkit2gtk-4.1, Ubuntu/Debian: libwebkit2gtk-4.1-0, Fedora: webkit2gtk4.1)"
 
   local prefix="$HOME/.local"
