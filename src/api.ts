@@ -45,4 +45,5 @@ export const planRoute = (originIata: string, destIata: string) =>
 export const saveSession = (session: Session) => invoke<void>("save_session", { session });
 export const listSessions = () => invoke<Session[]>("list_sessions");
 export const notifyDesktop = (title: string, body: string) => invoke<void>("notify", { title, body });
+export const publishFlight = (json: string | null) => invoke<void>("publish_flight", { json });
 export const devLog =(message: string) => invoke<void>("dev_log", { message });
