@@ -7,6 +7,7 @@ import {
   notifyDesktop,
   planRoute,
   saveSession,
+  publishFlight,
   searchAirports,
   searchDestinations,
   type Airport,
@@ -393,6 +394,9 @@ function storeFlight() {
   } catch (error) {
     console.warn("Could not save the flight", error);
   }
+  // The widget gets the live (unpaused) clock plus a heartbeat so it can tell when the app died.
+  const status = { origin, dest: phase.planned.dest, minutes, clock: phase.clock, tag, updatedAt: flightSavedAt };
+  publishFlight(JSON.stringify(status)).catch(() => {});
 }
 
 function clearStoredFlight() {
@@ -401,6 +405,7 @@ function clearStoredFlight() {
   } catch (error) {
     console.warn("Could not clear the saved flight", error);
   }
+  publishFlight(null).catch(() => {});
 }
 
 function readStoredFlight() {

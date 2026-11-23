@@ -55,6 +55,24 @@ fn notify(title: String, body: String) -> Result<(), String> {
     status.success().then_some(()).ok_or_else(|| "the desktop rejected the notification".to_string())
 }
 
+// Lets desktop widgets (a Quickshell bar item) follow the flight; written atomically so a reader never sees half a file.
+#[tauri::command]
+fn publish_flight(app: tauri::AppHandle, json: Option<String>) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let path = dir.join("flight-status.json");
+    match json {
+        Some(json) => {
+            let tmp = dir.join("flight-status.json.tmp");
+            fs::write(&tmp, json).map_err(|e| e.to_string())?;
+            fs::rename(&tmp, &path).map_err(|e| e.to_string())
+        }
+        None => match fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            _ => Ok(()),
+        },
+    }
+}
+
 #[tauri::command]
 fn airports_by_code(state: State<AppState>, codes: Vec<String>) -> Vec<Airport> {
     state.airports.iter().filter(|a| codes.contains(&a.iata)).cloned().collect()
@@ -113,6 +131,7 @@ pub fn run() {
             save_session,
             list_sessions,
             notify,
+            publish_flight,
             dev_log
         ])
         .run(tauri::generate_context!())
