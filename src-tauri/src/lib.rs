@@ -110,9 +110,37 @@ fn dev_log(message: String) {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn keep_running_when_closed(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+        // Must be the first plugin. A second launch reopens this window; `meridian --quit` really exits.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|arg| arg == "--quit") {
+                app.exit(0);
+            } else if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+}
+
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "linux")]
+    let builder = keep_running_when_closed(builder);
+    builder
         .setup(|app| {
+            // No running copy to stop: the single-instance plugin let this launch through.
+            if std::env::args().any(|arg| arg == "--quit") {
+                std::process::exit(0);
+            }
             let airport_db = app.path().resource_dir()?.join("airports.sqlite");
             let data_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&data_dir)?;
