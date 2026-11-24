@@ -3,6 +3,9 @@ import type { Settings } from "./settings";
 const RING_EVERY_MS = 5000;
 const AMBIENCE_GAIN = 0.6;
 const SILENT = 0.0001;
+// WebKitGTK can leave a long-lived AudioContext "running" but silent after hours hidden,
+// so an idle context is closed and the next sound gets a fresh one.
+export const IDLE_CLOSE_MS = 30_000;
 
 export type Cue = Settings["sound"] | "takeoff" | "half" | "descent";
 
@@ -11,8 +14,22 @@ export function createSound(settings: () => Settings) {
   let master: GainNode | null = null;
   let ambience: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
   let ringTimer = 0;
+  let idleTimer = 0;
+
+  const release = () => {
+    idleTimer = 0;
+    if (ambience || ringTimer || !context) return;
+    void context.close().catch(() => {});
+    context = null;
+    master = null;
+  };
+  const releaseWhenIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(release, IDLE_CLOSE_MS);
+  };
 
   const audio = () => {
+    clearTimeout(idleTimer);
     try {
       if (!context) {
         context = new AudioContext();
@@ -42,6 +59,7 @@ export function createSound(settings: () => Settings) {
     oscillator.start(at);
     oscillator.stop(at + length + 0.05);
   };
+
 
   const play = (cue: Cue) => {
     const ac = audio();
@@ -73,6 +91,7 @@ export function createSound(settings: () => Settings) {
       note(196, 0, 1.8, "triangle", 0.12, 587);
       note(392, 0.1, 1.6, "sine", 0.05, 1174);
     }
+    releaseWhenIdle();
   };
 
   const startAmbience = () => {
@@ -102,9 +121,11 @@ export function createSound(settings: () => Settings) {
     ambience = { source, gain };
   };
 
+
   const silence = () => {
     clearInterval(ringTimer);
     ringTimer = 0;
+    releaseWhenIdle();
   };
 
   return {
@@ -115,6 +136,7 @@ export function createSound(settings: () => Settings) {
       if (!wanted && ambience) {
         ambience.source.stop();
         ambience = null;
+        releaseWhenIdle();
       }
       if (master) master.gain.value = settings().vol / 100;
       if (ambience && context) {
